@@ -14,7 +14,7 @@ methods_all = ['uniform', 'sampling', 'search', 'sampling_sampling', 'search_sea
 get_idx = {method:i for i, method in enumerate(methods_all)}
 colors = ['#CC79A7', '#0072B2', '#D55E00', '#009E73', '#E69F00', '#56B4E9', '#000000']
 markers = ['v', 'o', 's', '^',  'D', '*', '']
-linestyles = [':', '-.', '-', '-','--', '--', ':']
+linestyles = [':', '-.', '-', '-','--', '--', '--']
 plotorder = {"sampling_sampling":10, "sampling":8, "search":7, "search_search":9, "uniform":2, "sampling_seearch":1}
 names = ["-".join(method.split("_")) for method in methods_all]
 
@@ -38,9 +38,17 @@ def get_k_by_energy(results, n, p=2):
 
     for method, res in results.items():
         if len(method.split("_")) > 1: # if is swap method
-            data[method] = np.array(res['swap_values']) / divisor
+            vals = res['swap_values']
+            # print(vals, p)
+            for j, x in enumerate(vals):
+                for i, v in enumerate(x):
+                    if np.isnan(v):
+                        print(vals[j][i])
+                        vals[j][i] = np.nanmin(res['all_swap_values'][0][i+1])
+                        print(vals[j][i])
         else:
-            data[method] = np.array(res['build_values']) / divisor
+            vals = res['build_values']
+        data[method] = np.array(vals) / divisor
     return data
 
 def get_num_forced_trivial_swaps(samp_samp_res):

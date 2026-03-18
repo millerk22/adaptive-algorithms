@@ -6,6 +6,7 @@ from graphlearning.datasets import load
 from graphlearning.trainsets import generate
 from graphlearning import weightmatrix as wm
 from graphlearning import graph
+from scipy.io import loadmat
 
 def load_dataset(dataset_name, n_test=500):
     if dataset_name == "blobssmallest":
@@ -27,6 +28,23 @@ def load_dataset(dataset_name, n_test=500):
         X = data.data.features
         labels = data.data.targets
         print(X.shape)
+    elif dataset_name == "lr":
+        n, d, k = 1000, 30, 20
+        rand_state = np.random.RandomState(43)
+        Y = rand_state.randn(d, k)
+        W = rand_state.randn(k, n)
+        X = Y @ W
+        labels = None 
+        X = X.T 
+    elif dataset_name == "lrnoisy":
+        n, d, k = 1000, 30, 20
+        rand_state = np.random.RandomState(43)
+        Y = rand_state.randn(d, k)
+        W = rand_state.randn(k, n) 
+        X = Y @ W + 0.001*rand_state.randn(d, n)
+        labels = None 
+        X = X.T 
+
     elif dataset_name == "news":
         data = fetch_ucirepo(id=332)
         X = data.data.features
@@ -40,6 +58,16 @@ def load_dataset(dataset_name, n_test=500):
     elif dataset_name == "yalefaces":
         X, labels = np.load("./data/yalefaces.npz", allow_pickle=True).values()
         print(X.shape)
+    elif dataset_name == "interactions":
+        data = loadmat("./data/interactions.mat")
+        X = data['B'].T.astype(np.float64)
+        labels = None
+    elif dataset_name == "bfi":
+        X, labels = np.load("./data/bfi.npz", allow_pickle=True).values()
+        X = X.T.astype(np.float64)
+        # X -= np.mean(X, axis=1)[:, np.newaxis]
+        # X /= np.std(X, axis=1)[:, np.newaxis]
+
     elif dataset_name == "iris":
         X, labels = load_iris(return_X_y=True)
     elif dataset_name == "digits":
@@ -161,6 +189,8 @@ def load_dataset(dataset_name, n_test=500):
         inds = generate(labels, rate=1000, seed=42)
         X = X[inds]
         labels = labels[inds]
+    elif dataset_name == "mnistw":
+        X, labels = np.load("./data/mnist_W.npz").values()
     elif dataset_name == "mnistsc":
         X, labels = load("mnist", metric="raw")
         W = wm.knn(X, k=30)
@@ -173,9 +203,13 @@ def load_dataset(dataset_name, n_test=500):
         labels = labels[inds]
     elif dataset_name == "mnistraw":
         X, labels = load("mnist", metric="raw")
-        inds = generate(labels, rate=1000, seed=42)
+        inds = generate(labels, rate=750, seed=42)
         X = X[inds]
         labels = labels[inds]
+    elif dataset_name == "mnistrawT":
+        X, labels = load("mnist", metric="raw")
+        X = X.T
+        labels = None 
     elif dataset_name == "cifar10":
         X, labels = load("cifar", metric="simclr")
         inds = generate(labels, rate=1000, seed=42)

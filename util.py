@@ -118,6 +118,7 @@ def run_experiment(X, p, method_str, results, args, labels=None):
                 continue 
 
         # a build only method
+        searchtol= 1e-11
         if swap_method is None:
             # Instantiate an Energy object for this test
             if args.energy == "conic":
@@ -128,13 +129,14 @@ def run_experiment(X, p, method_str, results, args, labels=None):
                 Energy = ClusteringEnergy(X, p=p)
             elif args.energy == "lowrank":
                 Energy = LowRankEnergy(X, p=p)
+                searchtol = 1e-2
             else:
                 print(f"Energy type = {args.energy} not recognized, skipping")
                 break
             
             # Perform the build function for this run
             algorithm = AdaptiveAlgorithm(Energy, seed=seed, record=True)
-            algorithm.build_phase(k_todo, method=build_method)
+            algorithm.build_phase(k_todo, method=build_method, searchtol=searchtol)
             results[method_str]["build_times"].append(algorithm.build_times)
             results[method_str]["build_values"].append(algorithm.build_values)
             results[method_str]["indices"].append(Energy.indices)

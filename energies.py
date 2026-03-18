@@ -64,9 +64,11 @@ class EnergyClass(object):
         
         search_dists = self.search_distances(candidates)
         
-        # weassume that we don't need to consider already selected points in our search values. We assume that their search 
+        # we assume that we don't need to consider already selected points in our search values. We assume that their search 
         # value--even in the case of swaps--is simply the current energy.  
-        all_search_vals = np.ones(self.n)*self.energy
+        all_search_vals = np.empty((self.n,), dtype=self.X.dtype)
+        all_search_vals[:] = self.energy 
+
         if self.p is not None:
             all_search_vals[candidates] = np.linalg.norm(search_dists, ord=self.p, axis=1)
         else:
@@ -217,7 +219,7 @@ class ClusteringEnergy(EnergyClass):
     def search_distances(self, candidates):
         # Q[i,:] = q_{+i} vector in Alg 8.2
         if len(self.indices) == 0:
-            Q = self.D[:,candidates].T
+            Q = self.D[candidates,:]
         else:
             Q = np.minimum(self.dists, self.D[candidates,:])
         return Q
@@ -325,9 +327,12 @@ class LowRankEnergy(EnergyClass):
     Low-rank energy class that supports both real and complex valued matrices.
     For complex X, we work with the Hermitian Gram matrix G = X^* X.
     """
-    def __init__(self, X, p=2):
+    def __init__(self, X, p=2, isgram=False):
         super().__init__(X, p=p)
+        
         self.dim, self.n = self.X.shape
+        if isgram:
+            assert self.dim == self.n
 
         # Detect whether X is complex
         self.is_complex = np.iscomplexobj(self.X)
@@ -336,11 +341,16 @@ class LowRankEnergy(EnergyClass):
         if (not self.is_complex) and (self.n >= N_FLOAT_THRESHOLD):
             self.X = self.X.astype(np.float32)
 
-        # Compute the Gram matrix G = X^* X
-        if self.is_complex:
-            self.G = self.X.conj().T @ self.X
+        if not isgram:
+            # Compute the Gram matrix G = X^* X
+            if self.is_complex:
+                self.G = self.X.conj().T @ self.X
+            else:
+                self.G = self.X.T @ self.X
         else:
-            self.G = self.X.T @ self.X
+            self.G = self.X.copy()
+            # del self.X 
+            # print("Since data given was gram matrix, deleting 2nd copy in self.X")
 
         self.d = np.real(np.diagonal(self.G).copy())
         self.dists = np.sqrt(self.d)
@@ -352,13 +362,16 @@ class LowRankEnergy(EnergyClass):
         self.U = None  # for adaptive sampling swap
         self.verbose = False
         self.test = False
+        self.norms2 = self.d.copy()
+        self.tol = 1e-13
+        self.in_span = np.zeros((self.n,), dtype=bool)  # boolean mask of which points are in the span of the selected prototypes (for numerical stability in search builds)
         
     def set_k(self, k):
         super().set_k(k)
         assert(self.W is None and self.L is None and self.f is None), "Cannot call set_k after objects have been allocated."
         # W and L follow X's dtype; f is always real
-        self.W = np.zeros((self.k, self.n), dtype=self.X.dtype)
-        self.L = np.zeros((self.k, self.k), dtype=self.X.dtype)
+        self.W = np.zeros((self.k, self.n), dtype=self.G.dtype)
+        self.L = np.zeros((self.k, self.k), dtype=self.G.dtype)
         self.f = np.zeros((self.k,))
         return 
     
@@ -397,17 +410,25 @@ class LowRankEnergy(EnergyClass):
     def add(self, i):   # update the interpolative decomposition (Algorithm 9.1)
         k_curr = len(self.indices)
         G_ii = np.real(self.G[i, i])
+        if np.isclose(G_ii, 0.0):
+            print(f"WARNING: G[i,i]  = 0.0, not adding i = {i} to indices....")
+            return 
         if k_curr == 0:
             self.L[0, 0] = np.sqrt(G_ii)
             self.f[0] = 1.0 / G_ii
             self.W[0, :] = self.G[i, :] / G_ii
             self.d -= np.abs(self.G[i, :])**2 / G_ii
-
+            self.in_span = self.d < self.tol*self.norms2
         else:
             # Solve L a = G[indices, i]
             a = solve_triangular(self.L[:k_curr, :k_curr], self.G[self.indices, i], lower=True)
             v = G_ii - np.vdot(a, a).real
-            if np.isclose(v, 0.0) or v < 0.0:
+            # if k_curr == self.k - 1:
+            #     print(v)
+            if not np.isclose(v, self.d[i]):
+                print(f"WARNING: v ({v}) != self.d[i] ({self.d[i]}) in adding i={i} to indices....")
+
+            if v < 1e-11:
                 print(f"WARNING: Adding {i} to the decomposition resulted in non-positive v = {v} (i.e., singular G[S, S])...")
                 print("\tNOT ADDING...")
                 return 
@@ -425,15 +446,30 @@ class LowRankEnergy(EnergyClass):
 
             # update W
             r = self.G[i, :] - self.G[i, self.indices] @ self.W[:k_curr, :]
+            # if k_curr == self.k - 1:
+            #     print("r_i vector", r.min(), r.max())
             r[i] = v
+            # if k_curr == self.k - 1:
+            #     print(r.min(), r.max())
             r_v = r / v
-            self.W[k_curr, :] = r_v
-            self.W[:k_curr, :] -= np.outer(b, r_v) 
-            
+            # if k_curr == self.k - 1:
+            #     print(r_v.min(), r_v.max())
+            self.W[k_curr, ~self.in_span] = r_v[~self.in_span]
+            self.W[:k_curr, ~self.in_span] -= np.outer(b, r_v[~self.in_span]) 
+
             # update d
             dold = np.copy(self.d)
-            self.d -= np.abs(r)**2 / v
+            self.d[~self.in_span] -= np.abs(r[~self.in_span])**2 / v
+            self.d[i] = 0.0
             min_idx = np.argmin(self.d)
+            # if k_curr == self.k - 1:
+            #     thing = np.abs(r)**2. / v 
+            #     print("------------------------------------")
+            #     print(i, min_idx)
+            #     print(dold[min_idx], self.d[min_idx])
+            #     print(thing[min_idx])
+            #     print(thing.min(), thing.max())
+            self.in_span = self.d < self.tol*self.norms2
         
         # Update R if we're in a search build
         if hasattr(self, 'R'):
@@ -441,9 +477,11 @@ class LowRankEnergy(EnergyClass):
             self.R -= np.outer(w_k, w_k.conj()) / self.f[k_curr]
 
         # Sanity check: d should not be significantly negative
-        if self.d.min() < -1e-9:
-            print("Something wrong, got a very negative value in d: ", self.d.min())
-            print("\tPerhaps increase precision to float64...")
+        if self.d.min() < -1e-7:
+            print("Something wrong! got a very negative value in d: ", self.d.min(), np.where(self.d < 0)[0].size, len(self.indices))
+            # print("\tPerhaps increase precision to float64...")
+            # print(f"\tindices = {self.indices}, adding {i}")
+
         # Clip small negatives from numerical errors
         self.d = np.clip(self.d, 0.0, None)
         
@@ -459,22 +497,32 @@ class LowRankEnergy(EnergyClass):
         elif not hasattr(self, 'R'):
             submatrix = self.G[np.ix_(self.indices,self.indices)]
             self.R = self.G - self.W[:len(self.indices),:].conj().T @ submatrix @ self.W[:len(self.indices),:]
-            
-        Q = np.outer(np.ones(len(candidates)), self.d)
+        
+        
+        Q = np.empty((candidates.size, self.n), dtype=self.d.dtype)
+        Q[:] = self.d 
 
         # don't want to consider those points already in the span for numerical stability reasons
-        cand_outside_span = np.intersect1d(candidates, np.where(self.d > 1e-12)[0])
+        cand_outside_span = np.intersect1d(candidates, np.where(self.d > self.tol*self.norms2)[0])
+        # print(cand_outside_span.size, candidates.size)
         cand_mask = np.isin(candidates, cand_outside_span)
 
         # compute update of distances for all candidates outside the span
         if cand_outside_span.size > 0:
-            Q[cand_mask, :] -= (np.abs(self.R[cand_outside_span,:])**2) / self.d[cand_outside_span, np.newaxis]
+            Rsub = self.R[cand_outside_span,:]
+            if self.is_complex:
+                mag2 = Rsub.real * Rsub.real + Rsub.imag * Rsub.imag 
+            else:
+                mag2 = Rsub * Rsub 
+            Q[cand_mask, :] -= mag2 / self.d[cand_outside_span, np.newaxis]
 
-        Q = np.clip(Q, 0.0, None)
+        # if (Q < -1e-13).any():
+        #     print(f"WARNING: Negative entries (e.g., {Q.min()}) in Q matrix of search build. Clipping...")
+        
+        np.maximum(Q, 0.0, out=Q)
         Q = np.sqrt(Q)  # because self.d stores squared distances, and we want Euclidean distances
 
-        # return transpose because of how search_distances is currently used in compute_search_values
-        return Q
+        return Q    
     
     def downdate(self, t): # (Algorithm 9.4)
         k_max = self.f.size
@@ -484,6 +532,9 @@ class LowRankEnergy(EnergyClass):
 
         # downdate d first
         self.d += np.abs(wt)**2 / ft
+        self.d[self.indices[:t] + self.indices[t+1:]] = 0.0
+        self.d[np.isclose(self.d, 0.0)] = 0.0
+        self.d[np.isnan(self.d)] = 0.0
         
         # perform Cholesky Delete operation
         self.cholesky_delete(self.L, t)
@@ -499,8 +550,10 @@ class LowRankEnergy(EnergyClass):
         # is this going to be bad to do? Seems like we have a problem with numerical instability if we don't do this...
         self.f[t] = 0.0  
         self.W[t, :] = 0.0
+        self.W[np.ix_(list(range(t)) + list(range(t+1,len(self.indices))), self.indices[:t] + self.indices[t+1:])] = np.eye(len(self.indices)-1)
         
         # update these values
+        self.d = np.clip(self.d, 0.0, None)  # clip small negatives from numerical errors
         self.dists = np.sqrt(self.d)  
         self.compute_energy()
 
@@ -544,7 +597,7 @@ class LowRankEnergy(EnergyClass):
                 print("\tNOT UPDATING, reverting to previous prototypes...")
             
             # revert back and don't perform the swap
-            return self.update(t, self.indices[t]) 
+            return #self.update(t, self.indices[t], recursed=True) 
             
         b = solve_triangular(self.L, a, lower=True, trans='C')
         b[t] = -1.0
@@ -559,11 +612,17 @@ class LowRankEnergy(EnergyClass):
 
         self.W -= np.outer(b, rstar)/ v
         self.d -= np.abs(rstar)**2. / v
-
+        self.d[np.isclose(self.d, 0.0)] = 0.0
         np.clip(self.d, 0.0, None, out=self.d)  # clip small negatives from numerical errors
 
         # update indices and change the cholesky factor via add
         self.indices[t] = i
+
+        # make sure W, d are exact on the prototype set
+        self.W[np.ix_(np.arange(len(self.indices)), self.indices)] = np.eye(len(self.indices))
+        self.d[self.indices] = 0.0
+
+        # Cholesky add
         self.cholesky_add(self.L, self.G[self.indices, i] , t)
 
         # update energy's values 
@@ -579,9 +638,14 @@ class LowRankEnergy(EnergyClass):
 
     def prep_all_downdates(self, returnU=False):
         U = np.tile(self.d, (self.f.size, 1)) + np.abs(self.W)**2 / self.f[:, np.newaxis] # do f.size in case of search swap prep, where we have not overwritten self.k...
+        for t in range(U.shape[0]):
+            U[t,self.indices[:t] + self.indices[t+1:]] = 0.0
         U = np.clip(U, 0.0, None)
         if self.p is None:
-            self.U = np.sqrt(U)
+            U = np.sqrt(U)
+            self.U = np.zeros_like(U)
+            max_inds = np.where(U == U.max(axis=1).reshape(-1,1))
+            self.U[max_inds] = 1.0
         elif np.isclose(self.p, 2):
             self.U = U
         else:
@@ -668,21 +732,30 @@ class LowRankEnergy(EnergyClass):
             rs = np.linalg.norm(self.R[:,idx])**2.
             
             denom = self.R[idx,idx] + ws_abs2 / self.f
-            skip_mask = np.isclose(denom / self.f, 0.0)   # for values where skip_mask = True, don't compute the swap value (results in non-singular G[S, S] which throws things off)
+            skip_mask = np.isclose(denom, 0.0)   # for values where skip_mask = True, don't compute the swap value (results in non-singular G[S, S] which throws things off)
             denom[skip_mask] = 1.0  # to avoid division by zero warnings
 
             # vals = U[:,s]
-            vals = W_rownorm2/self.f - (rs + W_rownorm2*ws_abs2 / (self.f**2.) + 2.*(ys*ws.conj()).real/self.f) /denom 
+            thing1 = W_rownorm2/self.f
+            thing2 = (rs + W_rownorm2*ws_abs2 / (self.f**2.) + 2.*(ys*ws.conj()).real/self.f) /denom 
+            vals = thing1 - thing2 
             vals[skip_mask] = np.inf  # set these to infinity so they are not chosen
             
             # correct for the different form of the values in the p = 2 case 
             shiftvals = vals + curr_energy**2. 
-            vals = np.sqrt(shiftvals)
-            if (shiftvals < 0).any():
-                print("\tWARNING: p=2 lowrank eager swap values wrong?", vals, curr_energy)
+            bad_mask = shiftvals < 0.0
+            vals[bad_mask] = np.inf 
+            vals[~bad_mask] = np.sqrt(shiftvals[~bad_mask])
+            
 
         else: # p != 2, (Algorithm 9.7)
             self.update(t=self.k, i=idx)  # update prototype set at (k+1)th prototype spot with current s 
+            if np.allclose(self.L[self.k, :], np.array(self.k*[0.0] + [1.])) and np.isclose(self.W[self.k, :], 0.0).all():
+                # if we ended up not being able to do the update (i.e., idx is too close to the span and so we didn't update Cholesky),
+                #    then just skip this possible swap by returning infinity for the values. 
+                vals = np.inf*np.ones(self.k)
+                return vals 
+            
             self.prep_all_downdates()  # precompute all downdatings including the new prototype at index k
             
             # choose best potential prototype swap, i
@@ -691,10 +764,12 @@ class LowRankEnergy(EnergyClass):
             else:
                 # prep_all_downdates() already includes the power p in the computation
                 vals = self.U.sum(axis=1)**(1./self.p)
-
-            # make sure the final entry of vals is the current energy
-            assert np.isclose(vals[-1], curr_energy)  
-            vals = vals[:-1] # since we've passed the above check, we can ignore the last entry, since we know it won't be chosen by .min() operation in sampler 
+            
+            if not np.isclose(vals[-1], curr_energy):
+                # if this happens, we're going to skip swapping on this index, since it implies some instability in using this as a candidate to swap in
+                vals = np.inf*np.ones(self.k)
+            else:  
+                vals = vals[:-1] # since we've passed the above check, we can ignore the last entry, since we know it won't be chosen by .min() operation in sampler 
 
         return vals  
 
@@ -834,8 +909,6 @@ class ConicHullEnergy(EnergyClass):
                 search_dists = [out[0] for out in outs]
         else:
             search_dists = [self.nnls_OGM_gram(search_ind=c, returnH=False)[0] for c in iterator]
-        
-        
         
         return np.array(search_dists) 
 

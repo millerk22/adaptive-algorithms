@@ -3,6 +3,7 @@ from energies import *
 from time import perf_counter
 from util import *
 
+import matplotlib.pyplot as plt
 
 class AdaptiveAlgorithm(object):
     def __init__(self, Energy_, seed=42, record=False):
@@ -27,7 +28,7 @@ class AdaptiveAlgorithm(object):
         self.swap_stag.append(w)
         return 
 
-    def build_phase(self, k, method="sampling"):
+    def build_phase(self, k, method="sampling", debug=False, searchtol=1e-11):
         assert method in ["sampling", "search", "uniform"]
         assert len(self.Energy.indices) == 0   # ensure we are starting with an "empty" indices set
 
@@ -45,10 +46,30 @@ class AdaptiveAlgorithm(object):
                 if method == "search": # adaptive-search build
                     # compute the search energies for all the non-included points
                     q_search_p = self.Energy.compute_search_values() # includes the power p in the computation in self.Energy
-
+                    
+                    
                     # arbitratily choose the minimizer of the search
-                    min_idxs = np.where(q_search_p == np.min(q_search_p))[0]
-                    idx = self.random_state.choice(min_idxs)
+                    min_val = np.min(q_search_p)
+                    # min_idxs = np.where(q_search_p == min_val)[0]
+                    # idx = self.random_state.choice(min_idxs)
+                    min_idxs = np.where(q_search_p <= min_val*(1.0 + searchtol))[0]
+                    idx = min_idxs[np.argmax(self.Energy.d[min_idxs])]
+
+                    if debug: # and (len(self.Energy.indices) % 10 == 0):
+                        fig, ax = plt.subplots()
+                        if hasattr(self.Energy, 'plotting_colors'):
+                            ax.scatter(self.Energy.d, q_search_p, c=self.Energy.plotting_colors)
+                        else:
+                            ax.scatter(self.Energy.d, q_search_p)
+                        ax.scatter(self.Energy.d[idx], q_search_p[idx], c='red', s=50, label='chosen')
+                        ax.set_ylabel("f(Y + i)")
+                        ax.set_xlabel("||r_i||^2")
+                        ax.set_yscale('log')
+                        ax.set_xscale('log')
+                        ax.set_title(f"Search build, it = {len(self.Energy.indices)}")
+                        plt.show()
+
+                    # print("min vals of q_search_p", q_search_p[min_idxs], min_idxs, idx)
 
                 else: # adaptive-sampling build
                     if self.Energy.p is not None:
@@ -62,6 +83,9 @@ class AdaptiveAlgorithm(object):
 
                 # update distances and add point to index set
                 self.Energy.add(idx)
+
+                # if method == "search":
+                #     print(f"updated energy value = {self.Energy.energy}")
 
                 if self.record:
                     toc = perf_counter()
@@ -82,6 +106,7 @@ class AdaptiveAlgorithm(object):
             num_swaps = 0
             if self.record:
                 tic = perf_counter()
+            
             while w < n:
                 # if debug:  
                     # print("\t", [np.allclose(self.Energy.X[:,s], self.Energy.X[:,i]) for i in self.Energy.indices])
@@ -91,6 +116,10 @@ class AdaptiveAlgorithm(object):
                     continue 
                 
                 curr_energy = np.copy(self.Energy.energy)
+                if curr_energy is None:
+                    print("Warning: current energy is None...")
+                if curr_energy == np.inf:
+                    print("Warning: current energy is inf...")
 
                 # construct the eager swap vector, r_i vectors (with prototype indices {S/s_t \cup i} for each s_t in S currently)
                 vals = self.Energy.compute_eager_swap_values(idx=s) 
@@ -98,11 +127,11 @@ class AdaptiveAlgorithm(object):
 
                 swap = (vals.min() < curr_energy) and ~np.isclose(vals.min(), curr_energy)
                 
-                if debug:
-                    new_energy = vals.min()
+                new_energy = vals.min()
                 
                 # check if we perform a swap
                 if swap: 
+                    print(w, n, curr_energy, new_energy)
                     if debug: 
                         print("swap!", s, w, self.Energy.energy, new_energy)
                     t_poss = np.where(np.isclose(vals, vals.min()))[0]
@@ -110,7 +139,29 @@ class AdaptiveAlgorithm(object):
                     s_old = self.Energy.indices[:][t]
 
                     self.Energy.swap(t, s, debug=debug)
-                    num_swaps += 1
+                    
+                    # because of numerical instability issues, we check that energy has actually decreased. 
+                    #   if not, then we revert the swap and continue to the next s
+                    if self.Energy.energy > curr_energy:
+                        # swap_energy = np.copy(self.Energy.energy)
+                        # swapped_indices = self.Energy.indices[:]
+                        self.Energy.swap(t, s_old, debug=debug) # swap back, and move to the next s
+                        if self.Energy.energy > curr_energy*1.0001:
+                            print(f"Warning (Search Swap): Energy after swap is {self.Energy.energy}, which is greater than the previous energy {curr_energy} by more than 0.01%")
+                            print("\tThis could be due to numerical instability issues, and we are stopping.")
+                            if self.record:
+                                if self.Energy.energy is None:
+                                    print("Warning: energy is None...")
+                                if self.Energy.energy == np.inf:
+                                    print("Warning: energy is inf...")
+                                toc = perf_counter()
+                                self.record_swap(toc-tic, self.Energy.energy, w) # record info 
+                                tic = perf_counter()
+
+                            break
+                        swap = False
+                    else:
+                        num_swaps += 1
 
                     if debug and False:
                         # check if R, Y, W, L are still correct after some swaps 
@@ -124,25 +175,26 @@ class AdaptiveAlgorithm(object):
                             energy_.init_set(self.Energy.indices[:t] + [s] + self.Energy.indices[t+1:])
                             print(f"\tRecomputed energy from scratch is {energy_.energy}")
 
-                    # record the time and energy for the swap move
-                    if self.record:
-                        toc = perf_counter()
-                        self.record_swap(toc-tic, self.Energy.energy, w) # record info 
-                        tic = perf_counter()
-                    
-                    
-                    # in the case that a max number of swaps is specified, check here if need to terminate
-                    #     (really only used with ConicEnergy because is costly)
-                    
-                    if num_swaps == max_swaps:
-                        print(f"-----Not necessarily converged, but reached specified maximum number of swaps ({max_swaps})-----")
-                        print("\tTerminating...")
-                        break
+                    if swap:
+                        # record the time and energy for the swap move
+                        if self.record:
+                            toc = perf_counter()
+                            self.record_swap(toc-tic, self.Energy.energy, w) # record info 
+                            tic = perf_counter()
+                        
+                        
+                        # in the case that a max number of swaps is specified, check here if need to terminate
+                        #     (really only used with ConicEnergy because is costly)
+                        
+                        if num_swaps == max_swaps:
+                            print(f"-----Not necessarily converged, but reached specified maximum number of swaps ({max_swaps})-----")
+                            print("\tTerminating...")
+                            break
 
-                    # reset stagnation counter
-                    w = 0
- 
-                else:
+                        # reset stagnation counter
+                        w = 0
+
+                if not swap:
                     if self.Energy.type == "lowrank": 
                         if self.Energy.p is None:
                             self.Energy.downdate(k)
