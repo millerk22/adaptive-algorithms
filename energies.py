@@ -375,9 +375,22 @@ class LowRankEnergy(EnergyClass):
         self.f = np.zeros((self.k,))
         return 
     
+    def init_set(self, inds, return_values=False):
+        assert self.k is None
+        self.set_k(len(inds))
+        vals = [self.energy]
+        remaining = list(inds)
+        for _ in range(len(inds)):
+            best_pos = int(np.argmax(self.d[remaining]))
+            self.add(remaining.pop(best_pos))
+            vals.append(self.energy)
+        if return_values:
+            return vals
+        return
+
     def prep_for_swaps(self, method="sampling"):
         if method == "search":
-            p2case = False 
+            p2case = False
             if self.p is not None:
                 if np.isclose(self.p, 2) and not self.test:
                     p2case = True
@@ -529,6 +542,8 @@ class LowRankEnergy(EnergyClass):
         assert t < k_max and t >= 0
         wt = np.copy(self.W[t,:])
         ft = np.copy(self.f[t])
+        if np.isclose(ft, 0.0):
+            print("ft = ", ft, "inds[t] = ", self.indices[t])
 
         # downdate d first
         self.d += np.abs(wt)**2 / ft
@@ -591,13 +606,8 @@ class LowRankEnergy(EnergyClass):
         a = solve_triangular(self.L, self.G[self.indices, i], lower=True)
         a_t = np.concatenate((a[:t], a[t+1:]))
         v = self.G[i,i].real - np.vdot(a_t, a_t).real
-        if np.isclose(v, 0.0) or v < 0.0:
-            if self.verbose:
-                print(f"WARNING: Updating to add {i} to the decomposition resulted in non-positive v = {v} (i.e., singular G[S, S])...")
-                print("\tNOT UPDATING, reverting to previous prototypes...")
-            
-            # revert back and don't perform the swap
-            return #self.update(t, self.indices[t], recursed=True) 
+        if v < 1e-10:
+            raise ValueError(f"Update failed: non-positive Schur complement v = {v} for index {i} (singular G[S, S])")
             
         b = solve_triangular(self.L, a, lower=True, trans='C')
         b[t] = -1.0
@@ -656,6 +666,7 @@ class LowRankEnergy(EnergyClass):
         return 
     
     def swap(self, t, i, debug=False):
+        swap_success = False
         if i in self.indices[:self.k]:
             print(f"Warning: {i} already in self.indices -- not a valid swap. Skipping...")
             return 
@@ -685,8 +696,11 @@ class LowRankEnergy(EnergyClass):
             self.f[[t,-1]] = self.f[[-1,t]]
 
             # change the Cholesky factor accordingly
-            LowRankEnergy.cholesky_add(self.L[:self.k,:self.k], self.G[self.indices[:self.k], i], t)
+            
+            LowRankEnergy.cholesky_add(self.L[:self.k,:self.k], self.G[self.indices[:self.k], i], t)   
             LowRankEnergy.cholesky_delete(self.L, self.k)
+            # except ValueError:
+            #     raise ValueError(f"Got a ValueError in the Cholesky update/delete during swap at t={t}, i={i}... This likely means that the swap resulted in a non-positive v value (i.e., singular G[S, S]). Check the code for details.")
 
             if debug and self.verbose:
                 print("after downdate, after interchange:")
@@ -749,12 +763,11 @@ class LowRankEnergy(EnergyClass):
             
 
         else: # p != 2, (Algorithm 9.7)
-            self.update(t=self.k, i=idx)  # update prototype set at (k+1)th prototype spot with current s 
-            if np.allclose(self.L[self.k, :], np.array(self.k*[0.0] + [1.])) and np.isclose(self.W[self.k, :], 0.0).all():
-                # if we ended up not being able to do the update (i.e., idx is too close to the span and so we didn't update Cholesky),
-                #    then just skip this possible swap by returning infinity for the values. 
-                vals = np.inf*np.ones(self.k)
-                return vals 
+            try:
+                self.update(t=self.k, i=idx)  # update prototype set at (k+1)th prototype spot with current s
+            except ValueError:
+                # idx is too close to the current span — skip this candidate
+                return np.inf*np.ones(self.k)
             
             self.prep_all_downdates()  # precompute all downdatings including the new prototype at index k
             
@@ -811,10 +824,12 @@ class LowRankEnergy(EnergyClass):
             v = z[t] - np.vdot(a, a).real
             c = z[t+1:] - L[t+1:,:t] @ a
             L[t,:t] = a.conj()
+        
         LowRankEnergy.cholesky_downdate(L[t+1:,t+1:], c/np.sqrt(v))
         L[t,t] = np.sqrt(v)
         L[t+1:,t] = c / np.sqrt(v)
-        return
+        return 
+        
 
     @staticmethod
     def cholesky_downdate(L, a):
@@ -850,6 +865,7 @@ class ConicHullEnergy(EnergyClass):
         self.n_jobs = n_jobs
         self.type = "conic"
         self.sst = float(np.sum(self.Gdiag))  # Total sum of squares: ||X||_F^2
+        print(self.sst)
 
 
     def set_k(self, k):
@@ -1022,7 +1038,7 @@ class ConicHullEnergy(EnergyClass):
         
         dist_vals = self.Gdiag - 2.*(G_S * H).sum(axis=0) + ((G_SS @ H) * H).sum(axis=0)
         dist_vals[dist_vals < 0] = 0.0
-        dist_vals = np.sqrt(dist_vals )    # we consider Euclidean distances 
+        dist_vals = np.sqrt(dist_vals ) / np.sqrt(self.sst)    # we consider Euclidean distances, divide by ||X||_F for compatibility with earlier results
         # if verbose:
         #     return {"dist_vals":dist_vals, "iters":i, "eps":eps, "eps0":eps0, "EPS":EPS }, H
 

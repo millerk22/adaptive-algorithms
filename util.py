@@ -5,7 +5,7 @@ from tqdm import tqdm
 from collections import defaultdict
 
 from energies import *
-from adaptive import *
+from adaptive import AdaptiveAlgorithm
 
 from sklearn.metrics import pairwise_distances
 from scipy.optimize import minimize
@@ -84,21 +84,43 @@ def run_experiments_with_p(args, X, p, labels=None):
 
         print(f"Overall Method = {method_str}, {count+1}/{len(methods_to_do)}")
         
-        results = run_experiment(X, p, method_str, results, args, labels=labels)
-
-        if args.save:
-            print(f"Saving (intermediate) results to file {savename}...")
-            with open(savename, 'wb') as rfile:
-                pickle.dump(results, rfile)
+        results = run_experiment(X, p, method_str, results, args, savename=savename, labels=labels)
     return 
 
 
+def diagnose_crash(savename, numseeds=None):
+    """Print per-method seed completion from a results file to identify where a crash occurred."""
+    if not os.path.exists(savename):
+        print(f"No results file found: {savename}")
+        return
+
+    with open(savename, 'rb') as f:
+        results = pickle.load(f)
+
+    print(f"File: {savename}")
+    for method_str in sorted(results.keys()):
+        seeds_done = list(results[method_str].get('seeds', []))
+        n_done = len(seeds_done)
+
+        if numseeds is not None:
+            if n_done == 0:
+                status = f"not started (0/{numseeds})"
+            elif n_done < numseeds:
+                status = f"INCOMPLETE ({n_done}/{numseeds}) — crashed on seed {seeds_done[-1] + 1}"
+            else:
+                status = f"complete ({n_done}/{numseeds})"
+        else:
+            status = f"{n_done} seed(s) done"
+
+        print(f"  {method_str:<22} {status}  seeds={seeds_done}")
+
+
 """
-Note: Need to have the experiments run build phase and swap phase separately, since for swap methods we will be 
+Note: Need to have the experiments run build phase and swap phase separately, since for swap methods we will be
     figuring out the swaps for each 1<= i <= k, not just always doing the k build and then swaps.
 """
 
-def run_experiment(X, p, method_str, results, args, labels=None):
+def run_experiment(X, p, method_str, results, args, savename=None, labels=None):
     if len(method_str.split("_")) == 2:
         build_method, swap_method = method_str.split("_")
     else:
@@ -114,7 +136,7 @@ def run_experiment(X, p, method_str, results, args, labels=None):
     for i, seed in tqdm(enumerate(args.seeds), total=len(args.seeds)):
         # since search is deterministic, only need to run one test
         if i > 0:
-            if method_str.split("_")[-1] == "search":  # this does include sampling_search, but for computational considerations we'll just do on the first seed.
+            if method_str == "search_search":  
                 continue 
 
         # a build only method
@@ -146,7 +168,7 @@ def run_experiment(X, p, method_str, results, args, labels=None):
             # avoid recomputing...
             indices_build = results[build_method]["indices"][i] # get the previously computed indices from the non-swap moves method
                                                                 # should have because of check done in main part of script
-
+            max_swaps = -1
             final_swap_values = []
             final_swap_indices = {}
             all_swap_values = {}
@@ -156,8 +178,12 @@ def run_experiment(X, p, method_str, results, args, labels=None):
             for k_ in tqdm(range(1, args.k+1), total=args.k, desc=f"Performing swaps for each of 1 to {args.k} points..."):
                 # Instantiate an Energy object for this test
                 if args.energy == "conic":
+                    if swap_method == "search":
+                        max_swaps = 100
                     Energy = ConicHullEnergy(X, p=p, n_jobs=args.njobs, verbose=True)
                 elif args.energy == "convex":
+                    if swap_method == "search":
+                        max_swaps = 100
                     Energy = ConvexHullEnergy(X, p=p, n_jobs=args.njobs, verbose=True)
                 elif args.energy == "cluster":
                     Energy = ClusteringEnergy(X, p=p)
@@ -172,12 +198,12 @@ def run_experiment(X, p, method_str, results, args, labels=None):
 
                 # instantiate adaptive algorithm
                 algorithm = AdaptiveAlgorithm(Energy, seed=seed, record=True)
-                if k_ == 1 and swap_method == "search":
+                if k_ == 1 and swap_method == "search" and build_method == "search":
                     # don't do a swap since search build is already "optimal subset of size 1" 
                     print(f"Skipping swap phase with k_ = {k_} for {swap_method}...")
                     # in this case the algorithm values will just be empty lists below
                 else:
-                    algorithm.swap_phase(method=swap_method, debug=False)
+                    algorithm.swap_phase(method=swap_method, debug=False, max_swaps=max_swaps)
                 final_swap_values.append(Energy.energy)
                 final_swap_indices[k_] = Energy.indices
                 all_swap_values[k_] = algorithm.swap_values 
@@ -195,7 +221,11 @@ def run_experiment(X, p, method_str, results, args, labels=None):
         # if completed this seed's experiment, append the seed value
         results[method_str]["seeds"].append(seed)
 
-    return results 
+        if args.save and savename is not None:
+            with open(savename, 'wb') as rfile:
+                pickle.dump(results, rfile)
+
+    return results
 
 
 

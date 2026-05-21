@@ -12,10 +12,10 @@ linestyles = {'sampling': 'ks-', 'search': 'bo-', 'uniform':'rx-',
               'reference': 'k--'}
 methods_all = ['uniform', 'sampling', 'search', 'sampling_sampling', 'search_search', 'sampling_search']
 get_idx = {method:i for i, method in enumerate(methods_all)}
-colors = ['#CC79A7', '#0072B2', '#D55E00', '#009E73', '#E69F00', '#56B4E9', '#000000']
+colors = ['#CC79A7', '#0072B2', '#D55E00', '#009E73',  '#56B4E9', '#E69F00', '#000000']
 markers = ['v', 'o', 's', '^',  'D', '*', '']
 linestyles = [':', '-.', '-', '-','--', '--', '--']
-plotorder = {"sampling_sampling":10, "sampling":8, "search":7, "search_search":9, "uniform":2, "sampling_seearch":1}
+plotorder = {"sampling_sampling":10, "sampling":8, "search":7, "search_search":9, "uniform":2, "sampling_search":1}
 names = ["-".join(method.split("_")) for method in methods_all]
 
 plt.rcParams.update({
@@ -37,15 +37,16 @@ def get_k_by_energy(results, n, p=2):
         divisor = n**(1.0/float(p))
 
     for method, res in results.items():
+        #print(method)
         if len(method.split("_")) > 1: # if is swap method
             vals = res['swap_values']
             # print(vals, p)
             for j, x in enumerate(vals):
                 for i, v in enumerate(x):
                     if np.isnan(v):
-                        print(vals[j][i])
+                        #print(vals[j][i])
                         vals[j][i] = np.nanmin(res['all_swap_values'][0][i+1])
-                        print(vals[j][i])
+                        #print(vals[j][i])
         else:
             vals = res['build_values']
         data[method] = np.array(vals) / divisor
@@ -66,49 +67,6 @@ def get_num_forced_trivial_swaps(samp_samp_res):
     return forced_swaps_counts, trivial_swaps_counts, tot_num_swaps
 
 
-
-def visualize_chosen_images(results, datasetname, k=0, p=2, ncols=5, figsize=(10,10), cmap="gray", imgshape=(25,25)):
-    X, labels = load_dataset(datasetname)
-    print(np.unique(labels))
-    try:
-        X = np.array([X[:,i].reshape((imgshape[0], imgshape[1])) for i in range(X.shape[1])]) # shape (height, width)
-    except:
-        raise ValueError(f"image shape {imgshape} not compatible with dataset")
-    print(X.shape)
-    for method, res in results.items():
-        if method == "sampling_search":
-            continue
-        if method == "uniform":
-            continue
-        print(f"---------------{method}---------------")
-        
-        prototypes = res['indices'][-1]
-        if type(prototypes) is list:
-            if k > 0:
-                prototypes = prototypes[:k]
-            else:
-                k = len(prototypes)
-        else:
-            if k > 0:
-                prototypes = prototypes[k][:k]
-            else:
-                prototypes = prototypes[max(list(prototypes.keys()))][:]
-                k = len(prototypes)
-        
-        images = X[prototypes]
-        titles = labels[prototypes]
-        ind_sort = np.argsort(titles)
-        images = images[ind_sort]
-        titles = titles[ind_sort]
-        nrows = (k + ncols - 1) // ncols
-        fig, axes = plt.subplots(nrows, ncols, figsize=figsize, constrained_layout=True)
-        axes = axes.ravel()
-        for j, ax in enumerate(axes.flat):
-            ax.imshow(images[j], cmap="gray")
-            ax.set_title("Label = {}".format(titles[j]), fontsize=9)
-            ax.axis("off")
-        plt.show()
-    return 
 
 
 def get_prototypes(results, run_num=0):
@@ -192,9 +150,11 @@ def get_reconstructions(results, X, kind, kvalues=[5, 10, 15, 20], p=2):
     return reconstructions, kvalues_done
 
 
+'''
+Something weird with conic all_swap_values on sampling_search, the last value is significantly higher than the rest???
+'''
 
-
-def get_time_by_energy(results, n, k, p=2):
+def get_time_by_energy(results, n, k, p=2, conic=False):
     data = {}
     divisor = 1.0
     if p is not None:
@@ -208,9 +168,15 @@ def get_time_by_energy(results, n, k, p=2):
             build_vals = np.array(res["build_values"])/divisor
             data[method] = (build_vals, np.cumsum(np.array(res["build_times"]), axis=1))
         else:
-            swap_vals = [np.array(vals[k])/divisor for vals in res["all_swap_values"]]
+            print(method, len(res["all_swap_values"]))
+            if method == "sampling_search" and conic: 
+                swap_vals = [np.array(res["all_swap_values"][k])]
+            else:
+                # [np.array(vals[k]).shape for vals in res["all_swap_values"]])
+                swap_vals = [np.array(vals[k])/divisor for vals in res["all_swap_values"]]
             swap_times = [np.array(vals[k]) for vals in res["all_swap_times"]]
             swap_vals = [np.concatenate((data[method.split("_")[0]][0][i,:k], swap_vals[i])) for i in range(len(swap_vals))] # append the build values 
+            print("\t", swap_vals)
             if method.split("_")[-1] == "sampling":
                 swap_vals = [np.minimum.accumulate(swap_vals[i]) for i in range(len(swap_vals))]
             build_times = data[method.split("_")[0]][1][:,:k]
@@ -257,3 +223,50 @@ def get_calls_by_energy(results, n, k, p=2):
 def is_mono(l):
     bools = [l[i+1] <= l[i] for i in range(len(l)-1)]
     return bools
+
+
+
+
+
+def visualize_chosen_images(results, datasetname, k=0, p=2, ncols=5, figsize=(10,10), cmap="gray", imgshape=(25,25)):
+    X, labels = load_dataset(datasetname)
+    print(np.unique(labels))
+    try:
+        X = np.array([X[:,i].reshape((imgshape[0], imgshape[1])) for i in range(X.shape[1])]) # shape (height, width)
+    except:
+        raise ValueError(f"image shape {imgshape} not compatible with dataset")
+    print(X.shape)
+    for method, res in results.items():
+        if method == "sampling_search":
+            continue
+        if method == "uniform":
+            continue
+        print(f"---------------{method}---------------")
+        
+        prototypes = res['indices'][-1]
+        if type(prototypes) is list:
+            if k > 0:
+                prototypes = prototypes[:k]
+            else:
+                k = len(prototypes)
+        else:
+            if k > 0:
+                prototypes = prototypes[k][:k]
+            else:
+                prototypes = prototypes[max(list(prototypes.keys()))][:]
+                k = len(prototypes)
+        
+        images = X[prototypes]
+        titles = labels[prototypes]
+        ind_sort = np.argsort(titles)
+        images = images[ind_sort]
+        titles = titles[ind_sort]
+        nrows = (k + ncols - 1) // ncols
+        fig, axes = plt.subplots(nrows, ncols, figsize=figsize, constrained_layout=True)
+        axes = axes.ravel()
+        for j, ax in enumerate(axes.flat):
+            ax.imshow(images[j], cmap="gray")
+            ax.set_title("Label = {}".format(titles[j]), fontsize=9)
+            ax.axis("off")
+        plt.show()
+    return 

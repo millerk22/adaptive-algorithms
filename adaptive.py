@@ -1,7 +1,7 @@
 import numpy as np
 from energies import *
 from time import perf_counter
-from util import *
+# from util import *
 
 import matplotlib.pyplot as plt
 
@@ -50,10 +50,13 @@ class AdaptiveAlgorithm(object):
                     
                     # arbitratily choose the minimizer of the search
                     min_val = np.min(q_search_p)
-                    # min_idxs = np.where(q_search_p == min_val)[0]
-                    # idx = self.random_state.choice(min_idxs)
-                    min_idxs = np.where(q_search_p <= min_val*(1.0 + searchtol))[0]
-                    idx = min_idxs[np.argmax(self.Energy.d[min_idxs])]
+                    if self.Energy.type == "lowrank":
+                        min_idxs = np.where(q_search_p <= min_val*(1.0 + searchtol))[0]
+                        idx = min_idxs[np.argmax(self.Energy.d[min_idxs])]
+                    else:
+                        min_idxs = np.where(q_search_p == min_val)[0]
+                        idx = self.random_state.choice(min_idxs)
+                    
 
                     if debug: # and (len(self.Energy.indices) % 10 == 0):
                         fig, ax = plt.subplots()
@@ -101,6 +104,8 @@ class AdaptiveAlgorithm(object):
         n = self.Energy.n
         self.Energy.prep_for_swaps(method)
 
+        # self.Energy.verbose = False
+
         if method == "search":
             s, w = 0, 0
             num_swaps = 0
@@ -116,10 +121,6 @@ class AdaptiveAlgorithm(object):
                     continue 
                 
                 curr_energy = np.copy(self.Energy.energy)
-                if curr_energy is None:
-                    print("Warning: current energy is None...")
-                if curr_energy == np.inf:
-                    print("Warning: current energy is inf...")
 
                 # construct the eager swap vector, r_i vectors (with prototype indices {S/s_t \cup i} for each s_t in S currently)
                 vals = self.Energy.compute_eager_swap_values(idx=s) 
@@ -131,68 +132,56 @@ class AdaptiveAlgorithm(object):
                 
                 # check if we perform a swap
                 if swap: 
-                    print(w, n, curr_energy, new_energy)
                     if debug: 
-                        print("swap!", s, w, self.Energy.energy, new_energy)
+                        print("swap!", s, w, curr_energy, new_energy)
                     t_poss = np.where(np.isclose(vals, vals.min()))[0]
                     t = t_poss[self.random_state.choice(len(t_poss))]
                     s_old = self.Energy.indices[:][t]
+                    good_indices = self.Energy.indices[:self.Energy.k]
+                    try:
+                        self.Energy.swap(t, s, debug=debug)
+                    except ValueError:
+                        print("ValueError in swap (Cholesky instability), resetting to pre-swap state and stopping.")
+                        for attr in ('R', 'Y', 'U'):
+                            if hasattr(self.Energy, attr):
+                                delattr(self.Energy, attr)
+                        self.Energy.__init__(self.Energy.X, p=self.Energy.p)
+                        self.Energy.init_set(good_indices)
+                        print("\t", self.Energy.energy)
+                        if self.record:
+                            toc = perf_counter()
+                            self.record_swap(-2, self.Energy.energy, n) # record info, since we are breaking with this, record other values to be able to diagnose afterward
+                            tic = perf_counter()
+                        break
 
-                    self.Energy.swap(t, s, debug=debug)
+                    if self.record:
+                        toc = perf_counter()
+                        self.record_swap(toc-tic, self.Energy.energy, w) # record info
+                        tic = perf_counter()
                     
                     # because of numerical instability issues, we check that energy has actually decreased. 
                     #   if not, then we revert the swap and continue to the next s
                     if self.Energy.energy > curr_energy:
-                        # swap_energy = np.copy(self.Energy.energy)
-                        # swapped_indices = self.Energy.indices[:]
                         self.Energy.swap(t, s_old, debug=debug) # swap back, and move to the next s
-                        if self.Energy.energy > curr_energy*1.0001:
-                            print(f"Warning (Search Swap): Energy after swap is {self.Energy.energy}, which is greater than the previous energy {curr_energy} by more than 0.01%")
-                            print("\tThis could be due to numerical instability issues, and we are stopping.")
-                            if self.record:
-                                if self.Energy.energy is None:
-                                    print("Warning: energy is None...")
-                                if self.Energy.energy == np.inf:
-                                    print("Warning: energy is inf...")
-                                toc = perf_counter()
-                                self.record_swap(toc-tic, self.Energy.energy, w) # record info 
-                                tic = perf_counter()
-
-                            break
-                        swap = False
-                    else:
-                        num_swaps += 1
-
-                    if debug and False:
-                        # check if R, Y, W, L are still correct after some swaps 
-                        print("Checking components after ", num_swaps , " swaps...")
-                        check_components(self.Energy, nround=5, checkR=self.Energy.p==2, verbose=False)
-
-                        if not np.isclose(new_energy, self.Energy.energy):
-                            print(f"Warning (Search Swap): Updated energy is {self.Energy.energy},\n\tthought it was going to be {new_energy}")
-                            print(f"\tt={t}, s={s}, previous s_t = {s_old}")
-                            energy_ = LowRankEnergy(self.Energy.X, p=self.Energy.p)
-                            energy_.init_set(self.Energy.indices[:t] + [s] + self.Energy.indices[t+1:])
-                            print(f"\tRecomputed energy from scratch is {energy_.energy}")
-
-                    if swap:
-                        # record the time and energy for the swap move
+                        print("swapped back...")
+                        print("\t", self.Energy.k, curr_energy, self.Energy.energy)
                         if self.record:
                             toc = perf_counter()
-                            self.record_swap(toc-tic, self.Energy.energy, w) # record info 
+                            self.record_swap(-1, self.Energy.energy, w) # record info, with -1 time to indicate swap was reverted
                             tic = perf_counter()
-                        
-                        
-                        # in the case that a max number of swaps is specified, check here if need to terminate
-                        #     (really only used with ConicEnergy because is costly)
-                        
-                        if num_swaps == max_swaps:
-                            print(f"-----Not necessarily converged, but reached specified maximum number of swaps ({max_swaps})-----")
-                            print("\tTerminating...")
-                            break
+                        break
+                    else:
+                        num_swaps += 1
+                    
+                    # in the case that a max number of swaps is specified, check here if need to terminate
+                    #     (really only used with ConicEnergy because is costly)
+                    if num_swaps == max_swaps:
+                        print(f"-----Not necessarily converged, but reached specified maximum number of swaps ({max_swaps})-----")
+                        print("\tTerminating...")
+                        break
 
-                        # reset stagnation counter
-                        w = 0
+                    # reset stagnation counter
+                    w = 0
 
                 if not swap:
                     if self.Energy.type == "lowrank": 
@@ -281,6 +270,12 @@ class AdaptiveAlgorithm(object):
                     
                 # Step 4: perform the swap if swap was found
                 if s_prime != self.Energy.indices[t]:
+                    if self.Energy.type == "lowrank":
+                        # pre-check the Schur complement v that update() will see after downdate(t);
+                        # skip this swap if s_prime is too close to the current span minus prototype t
+                        v = self.Energy.d[s_prime] + np.abs(self.Energy.W[t, s_prime])**2 / self.Energy.f[t]
+                        if v < 1e-10:
+                            continue  # t is recomputed at top of loop for lowrank, so no need to increment
                     self.Energy.swap(t, s_prime)
                     u += 1                   # increment swap counter
                     # track best energy found so far
@@ -311,8 +306,8 @@ class AdaptiveAlgorithm(object):
             self.Energy.init_set(best_inds)
             
             
-            if not np.isclose(self.Energy.energy, best_energy): # check that we have properly reset the Energy object
-                print("Warning...: ", best_energy, self.Energy.energy, "re-initialized energy is not the same?")
+            # if not np.isclose(self.Energy.energy, best_energy): # check that we have properly reset the Energy object
+            #     print("Warning...: ", best_energy, self.Energy.energy, "re-initialized energy is not the same?")
             
 
         else:
