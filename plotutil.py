@@ -150,9 +150,11 @@ def get_reconstructions(results, X, kind, kvalues=[5, 10, 15, 20], p=2):
     return reconstructions, kvalues_done
 
 
-'''
-Something weird with conic all_swap_values on sampling_search, the last value is significantly higher than the rest???
-'''
+
+def _normalize_swap_field(field):
+    """Normalize all_swap_*/stag fields: wrap a bare dict (single-seed conic case) into a list."""
+    return [field] if isinstance(field, dict) else field
+
 
 def get_time_by_energy(results, n, k, p=2, conic=False):
     data = {}
@@ -161,28 +163,27 @@ def get_time_by_energy(results, n, k, p=2, conic=False):
         divisor = n**(1.0/float(p))
 
     for method in sorted(results.keys()):
-        if method == "uniform":
+        if method in ("uniform", "search_search"):
             continue
         res = results[method]
         if len(method.split("_")) == 1:
             build_vals = np.array(res["build_values"])/divisor
             data[method] = (build_vals, np.cumsum(np.array(res["build_times"]), axis=1))
         else:
-            print(method, len(res["all_swap_values"]))
-            if method == "sampling_search" and conic: 
-                swap_vals = [np.array(res["all_swap_values"][k])]
-            else:
-                # [np.array(vals[k]).shape for vals in res["all_swap_values"]])
-                swap_vals = [np.array(vals[k])/divisor for vals in res["all_swap_values"]]
-            swap_times = [np.array(vals[k]) for vals in res["all_swap_times"]]
-            swap_vals = [np.concatenate((data[method.split("_")[0]][0][i,:k], swap_vals[i])) for i in range(len(swap_vals))] # append the build values 
-            print("\t", swap_vals)
+            swap_vals = [np.array(vals[k])/divisor for vals in _normalize_swap_field(res["all_swap_values"])]
+            swap_times = [np.array(vals[k]) for vals in _normalize_swap_field(res["all_swap_times"])]
+            # filter out sentinel entries: -1 = reverted swap, -2 = Cholesky error recovery (negative time),
+            # and any NaN energies that survive from the final post-break record_swap
+            masks = [(t >= 0) & np.isfinite(v) for t, v in zip(swap_times, swap_vals)]
+            swap_vals = [v[m] for v, m in zip(swap_vals, masks)]
+            swap_times = [t[m] for t, m in zip(swap_times, masks)]
+            swap_vals = [np.concatenate((data[method.split("_")[0]][0][i,:k], swap_vals[i])) for i in range(len(swap_vals))] # append the build values
             if method.split("_")[-1] == "sampling":
                 swap_vals = [np.minimum.accumulate(swap_vals[i]) for i in range(len(swap_vals))]
             build_times = data[method.split("_")[0]][1][:,:k]
             swap_times = [np.concatenate((build_times[i,:], build_times[i,-1] + np.cumsum(swap_times[i]))) for i in range(len(swap_times))]
             data[method] = (swap_vals, swap_times)
-    return data 
+    return data
 
 def get_calls_by_energy(results, n, k, p=2):
     data = {}
@@ -191,33 +192,42 @@ def get_calls_by_energy(results, n, k, p=2):
         divisor = n**(1.0/float(p))
 
     for method in sorted(results.keys()):
-        if method == "uniform":
+        if method in ("uniform", "search_search"):
             continue
         res = results[method]
         if len(method.split("_")) == 1:
             build_vals = np.array(res["build_values"])/divisor
             if method == "sampling":
-                build_calls = np.array([np.arange(1, build_vals.shape[1]+1) for s in range(build_vals.shape[0])])
+                # 1 lowrank call per build step
+                build_calls = np.ones((build_vals.shape[0], build_vals.shape[1]))
             elif method == "search":
-                build_calls = np.array([np.cumsum(np.array([n-j for j in range(k)])) for s in range(build_vals.shape[0])])
+                # n-j lowrank calls at build step j (scanning all non-included candidates)
+                build_calls = np.array([[n-j for j in range(build_vals.shape[1])] for s in range(build_vals.shape[0])])
             else:
                 raise ValueError
             data[method] = (build_vals, np.cumsum(build_calls, axis=1))
         else:
-            swap_vals = [np.array(vals[k])/divisor for vals in res["all_swap_values"]]
-            swap_stags = [vals[k] for vals in res["all_swap_stag"]]
-            
-            swap_vals = [np.concatenate((data[method.split("_")[0]][0][i,:k], swap_vals[i])) for i in range(len(swap_vals))] # append the build values 
+            swap_vals = [np.array(vals[k])/divisor for vals in _normalize_swap_field(res["all_swap_values"])]
+            swap_stags = [np.array(vals[k]) for vals in _normalize_swap_field(res["all_swap_stag"])]
+            swap_times_raw = [np.array(vals[k]) for vals in _normalize_swap_field(res["all_swap_times"])]
+            # filter out sentinel entries: -1 = reverted swap, -2 = Cholesky error recovery (negative time),
+            # and any NaN energies that survive from the final post-break record_swap
+            masks = [(t >= 0) & np.isfinite(v) for t, v in zip(swap_times_raw, swap_vals)]
+            swap_vals = [v[m] for v, m in zip(swap_vals, masks)]
+            swap_stags = [s[m] for s, m in zip(swap_stags, masks)]
+
+            swap_vals = [np.concatenate((data[method.split("_")[0]][0][i,:k], swap_vals[i])) for i in range(len(swap_vals))] # append the build values
             if method.split("_")[-1] == "sampling":
                 swap_vals = [np.minimum.accumulate(swap_vals[i]) for i in range(len(swap_vals))]
                 swap_calls = [[2*(s+1) for s in stag] for stag in swap_stags]
             elif method.split("_")[-1] == "search":
                 swap_calls = [[k*(s+1) for s in stag] for stag in swap_stags]
-            
+
             build_calls = data[method.split("_")[0]][1][:,:k]
-            swap_calls = [np.concatenate((build_calls[i,:] , build_calls[i,-1]+np.cumsum(swap_calls[i]))) for i in range(build_calls.shape[0])]
+            # use range(len(swap_calls)) not build_calls.shape[0]: build method may have more seeds than swap method
+            swap_calls = [np.concatenate((build_calls[i,:] , build_calls[i,-1]+np.cumsum(swap_calls[i]))) for i in range(len(swap_calls))]
             data[method] = (swap_vals, swap_calls)
-    return data 
+    return data
 
 
 def is_mono(l):
@@ -239,7 +249,7 @@ def visualize_chosen_images(results, datasetname, k=0, p=2, ncols=5, figsize=(10
     for method, res in results.items():
         if method == "sampling_search":
             continue
-        if method == "uniform":
+        if method in ("uniform", "search_search"):
             continue
         print(f"---------------{method}---------------")
         

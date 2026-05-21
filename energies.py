@@ -865,7 +865,6 @@ class ConicHullEnergy(EnergyClass):
         self.n_jobs = n_jobs
         self.type = "conic"
         self.sst = float(np.sum(self.Gdiag))  # Total sum of squares: ||X||_F^2
-        print(self.sst)
 
 
     def set_k(self, k):
