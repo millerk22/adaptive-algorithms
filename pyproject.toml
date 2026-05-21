@@ -3,7 +3,7 @@ requires = ["setuptools>=61"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "adaptive-sampling"
+name = "adaptive-algorithms"
 version = "0.1.0"
 description = "Adaptive sampling and adaptive search algorithms for prototype selection."
 readme = "README.md"
@@ -29,7 +29,7 @@ graph = ["graphlearning"]
 test = ["pytest"]
 
 [project.urls]
-Repository = "https://github.com/millerk22/adaptive-sampling"
+Repository = "https://github.com/millerk22/adaptive-algorithms"
 
 [tool.setuptools.packages.find]
 where = ["src"]

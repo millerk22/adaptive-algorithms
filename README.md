@@ -10,7 +10,7 @@ This repository implements a unified framework for selecting a small set of *pro
 
 ## Installation
 
-This repository uses a standard `src/` layout. That means Python will not find `adaptive_sampling` from a fresh checkout until the package is installed or `src/` is added to `PYTHONPATH`.
+This repository uses a standard `src/` layout. That means Python will not find `adaptive_algorithms` from a fresh checkout until the package is installed or `src/` is added to `PYTHONPATH`.
 
 From the repository root, install the package in editable mode:
 
@@ -38,7 +38,7 @@ If you are working in a notebook from a fresh clone, run this in the first noteb
 Data matrices are expected to have shape `(dim, n)`, with features as rows and samples as columns. In the notation below, this means $X = [x_1, \ldots, x_n] \in \mathbb{R}^{d \times n}$.
 
 ```python
-from adaptive_sampling import AdaptiveAlgorithm, LowRankEnergy, load_dataset
+from adaptive_algorithms import AdaptiveAlgorithm, LowRankEnergy, load_dataset
 
 X, labels = load_dataset("test", n_test=500)
 energy = LowRankEnergy(X, p=2)
@@ -129,7 +129,7 @@ Key arguments:
 
 | Argument | Default | Description |
 |---|---:|---|
-| `--dataset` | `test` | Dataset name handled by `adaptive_sampling.datasets.load_dataset`. |
+| `--dataset` | `test` | Dataset name handled by `adaptive_algorithms.datasets.load_dataset`. |
 | `--k` | `10` | Number of prototypes to select. |
 | `--k_oversample` | `50` | Number of prototypes for oversampled build methods. |
 | `--energy` | `conic` | One of `cluster`, `lowrank`, `conic`, or `convex`. |
@@ -163,7 +163,7 @@ Example configs are available in [configs](configs). Results are written to `res
 ## Repository Layout
 
 ```text
-src/adaptive_sampling/   Core package
+src/adaptive_algorithms/   Core package
 scripts/                 Command-line experiment runner
 configs/                 Example experiment configurations
 examples/                Introductory notebooks

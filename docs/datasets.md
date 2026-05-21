@@ -1,6 +1,6 @@
 # Datasets
 
-`adaptive_sampling.datasets.load_dataset` returns data as `(X, labels)`, with `X` arranged as features by samples.
+`adaptive_algorithms.datasets.load_dataset` returns data as `(X, labels)`, with `X` arranged as features by samples.
 
 Built-in or generated datasets include:
 

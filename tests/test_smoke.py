@@ -1,4 +1,4 @@
-from adaptive_sampling import AdaptiveAlgorithm, ClusteringEnergy, load_dataset
+from adaptive_algorithms import AdaptiveAlgorithm, ClusteringEnergy, load_dataset
 
 
 def test_sampling_build_on_synthetic_dataset():

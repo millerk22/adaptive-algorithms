@@ -10,9 +10,9 @@ SRC_DIR = PROJECT_ROOT / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
-from adaptive_sampling.datasets import load_dataset
-from adaptive_sampling.energies import IMPLEMENTED_ENERGIES
-from adaptive_sampling.experiments import run_experiments_with_p
+from adaptive_algorithms.datasets import load_dataset
+from adaptive_algorithms.energies import IMPLEMENTED_ENERGIES
+from adaptive_algorithms.experiments import run_experiments_with_p
 
 
 ALL_METHODS = ["search", "sampling", "uniform", "sampling_sampling", "sampling_search"] 

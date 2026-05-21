@@ -1,10 +1,10 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pickle
-from adaptive_sampling.datasets import load_dataset
+from adaptive_algorithms.datasets import load_dataset
 from collections import defaultdict
 
-from adaptive_sampling.energies import *
+from adaptive_algorithms.energies import *
 
 
 linestyles = {'sampling': 'ks-', 'search': 'bo-', 'uniform':'rx-',

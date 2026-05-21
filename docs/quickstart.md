@@ -1,6 +1,6 @@
 # Quickstart
 
-This project uses a `src/` layout, so install it from the repository root before importing `adaptive_sampling`:
+This project uses a `src/` layout, so install it from the repository root before importing `adaptive_algorithms`:
 
 ```bash
 pip install -e .

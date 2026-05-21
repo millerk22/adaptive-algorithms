@@ -1,5 +1,5 @@
 import numpy as np
-from adaptive_sampling.energies import *
+from adaptive_algorithms.energies import *
 from time import perf_counter
 
 class AdaptiveAlgorithm(object):
@@ -73,7 +73,7 @@ class AdaptiveAlgorithm(object):
 
                     # print("min vals of q_search_p", q_search_p[min_idxs], min_idxs, idx)
 
-                else: # adaptive-sampling build
+                else: # adaptive sampling build
                     if self.Energy.p is not None:
                         q = (self.Energy.dists/self.Energy.dists.max())**(self.Energy.p)
                         #q = self.Energy.dists**(self.Energy.p)
@@ -199,7 +199,7 @@ class AdaptiveAlgorithm(object):
                 toc = perf_counter()
                 self.record_swap(toc-tic, self.Energy.energy, w) 
 
-        elif method == "sampling":   # adaptive sampling swap with swap forcing (Currently Alg 3.4)    
+        elif method == "sampling":   # adaptive sampling swap with swap forcing (Currently Alg 3.4)
             # initialize counters, force swap prob vector, and best prototype trackers
             t, w, u = 0, 0, 0
             p = np.zeros(k)

@@ -1,8 +1,8 @@
 """Adaptive sampling algorithms for prototype selection."""
 
-from adaptive_sampling.adaptive import AdaptiveAlgorithm
-from adaptive_sampling.datasets import load_dataset
-from adaptive_sampling.energies import (
+from adaptive_algorithms.algorithms import AdaptiveAlgorithm
+from adaptive_algorithms.datasets import load_dataset
+from adaptive_algorithms.energies import (
     ClusteringEnergy,
     ConicHullEnergy,
     ConvexHullEnergy,

@@ -4,8 +4,8 @@ import pickle
 from tqdm import tqdm
 from collections import defaultdict
 
-from adaptive_sampling.energies import *
-from adaptive_sampling.adaptive import AdaptiveAlgorithm
+from adaptive_algorithms.energies import *
+from adaptive_algorithms.algorithms import AdaptiveAlgorithm
 
 from sklearn.metrics import pairwise_distances
 from scipy.optimize import minimize
