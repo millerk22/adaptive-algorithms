@@ -60,9 +60,9 @@ An energy object stores the dataset, the current prototype set, and the current 
 | Class | Type string | Approximation set $\mathcal{A}(\mathcal{Y})$ | Application |
 |---|---:|---|---|
 | `ClusteringEnergy` | `cluster` | $\mathcal{Y}$ | $k$-medoids / $k$-means |
-| `LowRankEnergy` | `lowrank` | $\operatorname{span}(\mathcal{Y})$ | Low-rank approximation |
-| `ConicHullEnergy` | `conic` | $\operatorname{coni}(\mathcal{Y}) = \operatorname{conv}(\mathcal{Y} \cup \{0\})$ | Nonnegative matrix factorization |
-| `ConvexHullEnergy` | `convex` | $\operatorname{conv}(\mathcal{Y})$ | Archetypal / archetypoid analysis |
+| `LowRankEnergy` | `lowrank` | $\mathrm{span}(\mathcal{Y})$ | Low-rank approximation |
+| `ConicHullEnergy` | `conic` | $\mathrm{coni}(\mathcal{Y}) = \mathrm{conv}(\mathcal{Y} \cup \{0\})$ | Nonnegative matrix factorization |
+| `ConvexHullEnergy` | `convex` | $\mathrm{conv}(\mathcal{Y})$ | Archetypal / archetypoid analysis |
 
 The power $p \in (0, \infty]$ controls the $\ell^p$ aggregation of per-point distances:
 
