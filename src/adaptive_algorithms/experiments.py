@@ -12,6 +12,26 @@ from scipy.optimize import minimize
 from scipy.linalg import cholesky
 
 
+class _NumpyCompatUnpickler(pickle.Unpickler):
+    """Load NumPy pickles saved across NumPy 1.x/2.x module paths."""
+
+    def find_class(self, module, name):
+        if module.startswith("numpy._core"):
+            module = "numpy.core" + module[len("numpy._core"):]
+        return super().find_class(module, name)
+
+
+def load_results_file(path):
+    with open(path, "rb") as f:
+        try:
+            return pickle.load(f)
+        except ModuleNotFoundError as exc:
+            if exc.name is None or not exc.name.startswith("numpy._core"):
+                raise
+            f.seek(0)
+            return _NumpyCompatUnpickler(f).load()
+
+
 def find_methods_to_do(args, p):
     savename = None
     results = None
@@ -30,8 +50,7 @@ def find_methods_to_do(args, p):
         savename = os.path.join(args.resultsdir, args.dataset + "_" + args.energy + "_k" + str(args.k) + "_p" + str(pstring) + "_ns" + str(args.numseeds) + args.postfix + ".pkl")
         results = None 
         if os.path.exists(savename):
-            with open(savename, "rb") as f:
-                results = pickle.load(f)
+            results = load_results_file(savename)
     
 
     # find what methods we have not run yet and need to do
@@ -95,8 +114,7 @@ def diagnose_crash(savename, numseeds=None):
         print(f"No results file found: {savename}")
         return
 
-    with open(savename, 'rb') as f:
-        results = pickle.load(f)
+    results = load_results_file(savename)
 
     print(f"File: {savename}")
     for method_str in sorted(results.keys()):
