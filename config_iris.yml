@@ -1,6 +1,0 @@
-dataset: iris
-k: 3
-k_oversample: 10
-energy: cluster
-numseeds: 10
-powers: [1, 2, 5, 10, 20, 50, 100, None]

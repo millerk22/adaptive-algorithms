@@ -1,6 +1,0 @@
-dataset: interactions 
-k: 75
-k_oversample: 100
-energy: lowrank
-numseeds: 10
-power: [1,2,5,None]

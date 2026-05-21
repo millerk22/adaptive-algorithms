@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "adaptive-sampling"
+version = "0.1.0"
+description = "Adaptive sampling and adaptive search algorithms for prototype selection."
+readme = "README.md"
+requires-python = ">=3.9"
+license = {file = "LICENSE"}
+authors = [
+  {name = "Kevin Miller"}, 
+  {name = "Ethan Epperly"}
+]
+dependencies = [
+  "matplotlib==3.7.1",
+  "numpy==1.22.3",
+  "joblib==1.2.0",
+  "PyYAML==6.0",
+  "scikit-learn==1.2.2",
+  "scipy==1.8.1",
+  "tqdm==4.65.0"
+]
+
+[project.optional-dependencies]
+uci = ["ucimlrepo"]
+graph = ["graphlearning"]
+test = ["pytest"]
+
+[project.urls]
+Repository = "https://github.com/millerk22/adaptive-sampling"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+

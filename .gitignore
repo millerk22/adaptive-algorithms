@@ -1,2 +1,15 @@
 __pycache__
-results/
+data/*
+!data/README.md
+!data/urban.npz
+!data/interactions.mat
+results/*
+!results/.gitkeep
+figures/*
+!figures/.gitkeep
+.ipynb_checkpoints/
+.pytest_cache/
+.cache/
+*.egg-info/
+build/
+dist/
