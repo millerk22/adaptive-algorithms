@@ -3,6 +3,7 @@ import scipy.sparse as sps
 from scipy.spatial.distance import pdist, cdist, squareform
 from sklearn.metrics.pairwise import rbf_kernel
 from joblib import Parallel, delayed, parallel_backend
+from threadpoolctl import threadpool_limits
 from tqdm import tqdm 
 from scipy.linalg import solve_triangular
 
@@ -930,8 +931,9 @@ class ConicHullEnergy(EnergyClass):
     def compute_eager_swap_values(self, idx):
         if idx in self.indices:
             return np.ones(len(self.indices))*self.energy*(1.0000001)
-        r = np.hstack([self.nnls_OGM_gram(search_ind=idx, idx_to_swap=j, returnH=False)[0].reshape(-1, 1) \
-                      for j in range(len(self.indices))])
+        with threadpool_limits(limits=1):
+            r = np.hstack([self.nnls_OGM_gram(search_ind=idx, idx_to_swap=j, returnH=False)[0].reshape(-1, 1) \
+                          for j in range(len(self.indices))])
         if self.p is None:
             r = np.max(r, axis=0)
         else:
@@ -1135,8 +1137,9 @@ class ConvexHullEnergy(EnergyClass):
     def compute_eager_swap_values(self, idx):
         if idx in self.indices:
             return np.ones(len(self.indices))*self.energy*(1.0000001)
-        r = np.hstack([self.nnls_gram(search_ind=idx, idx_to_swap=j, returnH=False)[0].reshape(-1, 1) \
-                      for j in range(len(self.indices))])
+        with threadpool_limits(limits=1):
+            r = np.hstack([self.nnls_gram(search_ind=idx, idx_to_swap=j, returnH=False)[0].reshape(-1, 1) \
+                          for j in range(len(self.indices))])
         if self.p is None:
             r = np.max(r, axis=0)
         else:

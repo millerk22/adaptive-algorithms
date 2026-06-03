@@ -110,7 +110,7 @@ class AdaptiveAlgorithm(object):
             num_swaps = 0
             if self.record:
                 tic = perf_counter()
-            
+
             while w < n:
                 # if debug:  
                     # print("\t", [np.allclose(self.Energy.X[:,s], self.Energy.X[:,i]) for i in self.Energy.indices])

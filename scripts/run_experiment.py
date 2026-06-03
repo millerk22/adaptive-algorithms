@@ -89,7 +89,7 @@ if __name__ == "__main__":
     parser.add_argument("--numseeds", default=1, type=int, help="Number of random trials (indexed by seeds) to perform")
     parser.add_argument("--postfix", default="", type=str, help="Postfix identifier string to be differentiate this run from others")
     parser.add_argument("--record", default=1, type=int, help="Bool flag (0 or 1) of whether or not to record times and other info for each iteration of methods.")
-    parser.add_argument("--njobs", default=12, type=int, help="Number of CPU cores to utilize in parallelization.")
+    parser.add_argument("--njobs", default=8, type=int, help="Number of CPU cores to utilize in parallelization.")
     parser.add_argument("--config", default="", type=str, help="Location of .yml configuration file containing 'methods' list.")
     parser.add_argument("--ntest", default=500, type=int, help="Size of 'test' dataset for timing comparisons.")
     args = parser.parse_args()

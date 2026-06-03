@@ -198,11 +198,11 @@ def run_experiment(X, p, method_str, results, args, savename=None, labels=None):
                 # Instantiate an Energy object for this test
                 if args.energy == "conic":
                     if swap_method == "search":
-                        max_swaps = 100
+                        max_swaps = 20
                     Energy = ConicHullEnergy(X, p=p, n_jobs=args.njobs, verbose=True)
                 elif args.energy == "convex":
                     if swap_method == "search":
-                        max_swaps = 100
+                        max_swaps = 20
                     Energy = ConvexHullEnergy(X, p=p, n_jobs=args.njobs, verbose=True)
                 elif args.energy == "cluster":
                     Energy = ClusteringEnergy(X, p=p)
