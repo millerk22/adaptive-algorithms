@@ -932,7 +932,7 @@ class ConicHullEnergy(EnergyClass):
         if idx in self.indices:
             return np.ones(len(self.indices))*self.energy*(1.0000001)
         with threadpool_limits(limits=1):
-            r = np.hstack([self.nnls_OGM_gram(search_ind=idx, idx_to_swap=j, returnH=False)[0].reshape(-1, 1) \
+            r = np.hstack([self.nnls_OGM_gram(search_ind=idx, idx_to_swap=j, returnH=False, term_cond=0, maxiter=100)[0].reshape(-1, 1) \
                           for j in range(len(self.indices))])
         if self.p is None:
             r = np.max(r, axis=0)
@@ -1138,7 +1138,7 @@ class ConvexHullEnergy(EnergyClass):
         if idx in self.indices:
             return np.ones(len(self.indices))*self.energy*(1.0000001)
         with threadpool_limits(limits=1):
-            r = np.hstack([self.nnls_gram(search_ind=idx, idx_to_swap=j, returnH=False)[0].reshape(-1, 1) \
+            r = np.hstack([self.nnls_gram(search_ind=idx, idx_to_swap=j, returnH=False, maxiter=100)[0].reshape(-1, 1) \
                           for j in range(len(self.indices))])
         if self.p is None:
             r = np.max(r, axis=0)
@@ -1231,17 +1231,22 @@ class ConvexHullEnergy(EnergyClass):
                 g = g - e @ np.sum(g * H, axis=0, keepdims=True)
 
                 Hold = H
-                while True:
+                ls_iter = 0
+                while ls_iter < 50:
                     H = Hold - muH * g
                     H = ConvexHullEnergy._project_to_simplex_columns(H)
 
                     HHt = H @ H.T
                     d = self.sst - 2.0 * np.sum(WtX * H) + np.sum(WtW * HHt)
-                    
+
                     if d <= d_inner_old * (1.0 + 1e-9):
                         muH *= 1.2
                         break
                     muH /= 2.0
+                    ls_iter += 1
+                else:
+                    H = Hold  # line search failed; keep previous H
+                    d = d_inner_old
 
             dd = d_old - d
 

@@ -275,7 +275,13 @@ class AdaptiveAlgorithm(object):
                         v = self.Energy.d[s_prime] + np.abs(self.Energy.W[t, s_prime])**2 / self.Energy.f[t]
                         if v < 1e-10:
                             continue  # t is recomputed at top of loop for lowrank, so no need to increment
-                    self.Energy.swap(t, s_prime)
+                    try:
+                        self.Energy.swap(t, s_prime)
+                    except ValueError:
+                        # downdate() ran but update() failed (Cholesky instability); recover to best known state
+                        self.Energy.__init__(self.Energy.X, p=self.Energy.p)
+                        self.Energy.init_set(best_inds)
+                        continue
                     u += 1                   # increment swap counter
                     # track best energy found so far
                     if self.Energy.energy < best_energy:

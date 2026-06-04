@@ -108,9 +108,10 @@ if __name__ == "__main__":
     
     for p in args.powers:
         print()
-        print("="*60)
-        print(f"================== p = {p}, energy_type = {args.energy} =======================")
-        print("="*60)
+        title = f"================== p = {p}, energy_type = {args.energy} =================="
+        print("="*len(title))
+        print(title)
+        print("="*len(title))
         if p == "None":
             p = None
 
