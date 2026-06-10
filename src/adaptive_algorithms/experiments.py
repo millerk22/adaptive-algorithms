@@ -155,8 +155,8 @@ def run_experiment(X, p, method_str, results, args, savename=None, labels=None):
     for i, seed in tqdm(enumerate(args.seeds), total=len(args.seeds)):
         # since search is deterministic, only need to run one test
         if i > 0:
-            if method_str == "search_search":  
-                continue 
+            if method_str in ("search", "search_search"):
+                continue
 
         # a build only method
         searchtol= 1e-11
