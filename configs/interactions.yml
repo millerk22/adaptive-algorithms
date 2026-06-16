@@ -4,3 +4,4 @@ k_oversample: 100
 energy: lowrank
 numseeds: 10
 powers: [1, 2, 5, None]
+oversample: [uniform, sampling, search]

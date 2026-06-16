@@ -4,5 +4,5 @@ k_oversample: 30
 energy: conic
 numseeds: 10
 powers: [1, 2, 5, None]
-overwrite: [sampling_search]
+oversample: [uniform, sampling, search]
 

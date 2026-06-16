@@ -248,6 +248,10 @@ def run_experiment(X, p, method_str, results, args, savename=None, labels=None):
 
 
 
+##################################################################
+########### Code for checking lowrank energy updates #############
+##################################################################
+
 def get_components_naive(G, indices):
     L = cholesky(G[np.ix_(indices, indices)], lower=True)
     W = np.linalg.inv(G[np.ix_(indices, indices)]) @ G[indices,:]
