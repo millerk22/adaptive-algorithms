@@ -101,6 +101,8 @@ class AdaptiveAlgorithm(object):
         assert type(max_swaps) == int
         k = len(self.Energy.indices)
         n = self.Energy.n
+        if self.record:
+            tic = perf_counter()
         self.Energy.prep_for_swaps(method)
 
         # self.Energy.verbose = False
@@ -108,8 +110,6 @@ class AdaptiveAlgorithm(object):
         if method == "search":
             s, w = 0, 0
             num_swaps = 0
-            if self.record:
-                tic = perf_counter()
 
             while w < n:
                 # if debug:  
@@ -204,10 +204,7 @@ class AdaptiveAlgorithm(object):
             t, w, u = 0, 0, 0
             p = np.zeros(k)
             best_energy, best_inds = self.Energy.energy, self.Energy.indices[:]  # will track the best found energy and indices through adaptive swap moves
-            
-            if self.record:
-                tic = perf_counter()
-            
+
             # Complete at most 2*k successful swaps
             while u < 2*k:
                 if self.Energy.type == "lowrank":
