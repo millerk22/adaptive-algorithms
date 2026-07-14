@@ -35,7 +35,8 @@ def load_dataset(dataset_name, n_test=500):
     elif dataset_name == "blobssmall":
         X, labels = make_blobs(5*[100], n_features=200, cluster_std=0.1, random_state=42)
     elif dataset_name == "blobs":
-        X, labels = make_blobs(5*[500], n_features=20, cluster_std=0.01, random_state=42)
+        X, labels = make_blobs(5*[2000], n_features=200, cluster_std=0.01, random_state=42)
+        print(X.shape)
     elif dataset_name == "blobs2":
         X, labels = make_blobs(5*[50], n_features=2, cluster_std=0.1, random_state=42)
     elif dataset_name == "blobs5":
